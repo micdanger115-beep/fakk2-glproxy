@@ -1,0 +1,8 @@
+/build*/
+/out/
+.vs/
+*.log
+# Keine Spieldateien ins Repo
+*.pk3
+*.exe
+*.dll
