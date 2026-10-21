@@ -60,9 +60,11 @@ jobs:
           # Wine wuerde sonst seine eigene opengl32 statt des Proxys laden.
           WINEDLLOVERRIDES: opengl32=n,b
           LIBGL_ALWAYS_SOFTWARE: "1"
+        # Beide Tests in einer Xvfb-Sitzung: ein wineserver, der ohne DISPLAY
+        # gestartet wurde, liesse sonst CreateWindow im zweiten Test scheitern.
         run: |
-          wine export_check.exe
-          xvfb-run -a -s "-screen 0 800x600x24" wine smoke_gl.exe --require-gl
+          xvfb-run -a -s "-screen 0 800x600x24" sh -c \
+            'wine export_check.exe && wine smoke_gl.exe --require-gl'
       - name: Log anzeigen
         if: always()
         run: cat build/bin/fakk2_glproxy.log || true
