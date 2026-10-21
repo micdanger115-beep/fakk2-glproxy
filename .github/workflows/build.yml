@@ -1,0 +1,75 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  msvc-win32:
+    name: Windows / MSVC (Win32)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Konfigurieren
+        run: cmake -S . -B build -A Win32
+      - name: Bauen
+        run: cmake --build build --config Release
+      - name: Exporte pruefen
+        run: build\bin\Release\export_check.exe
+      - name: GL-Rauchtest
+        # Ohne nutzbaren GL-Kontext auf dem Runner endet der Test mit SKIP.
+        run: build\bin\Release\smoke_gl.exe
+      - name: Log anzeigen
+        if: always()
+        shell: bash
+        run: cat build/bin/Release/fakk2_glproxy.log || true
+      - name: Paket zusammenstellen
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp build/bin/Release/opengl32.dll fakk2_glproxy.ini README.md dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fakk2-glproxy-msvc-win32
+          path: dist/
+
+  mingw-i686:
+    name: Linux / MinGW i686 + Wine-Test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Werkzeuge installieren
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+            cmake gcc-mingw-w64-i686 wine wine32:i386 xvfb xauth \
+            libgl1:i386 libgl1-mesa-dri:i386 libglx-mesa0:i386
+      - name: Konfigurieren
+        run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-i686.cmake -DCMAKE_BUILD_TYPE=Release
+      - name: Bauen
+        run: cmake --build build
+      - name: Tests unter Wine
+        working-directory: build/bin
+        env:
+          WINEDEBUG: -all
+          WINEARCH: win32
+          WINEPREFIX: ${{ runner.temp }}/wine32
+          # Wine wuerde sonst seine eigene opengl32 statt des Proxys laden.
+          WINEDLLOVERRIDES: opengl32=n,b
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          wine export_check.exe
+          xvfb-run -a -s "-screen 0 800x600x24" wine smoke_gl.exe --require-gl
+      - name: Log anzeigen
+        if: always()
+        run: cat build/bin/fakk2_glproxy.log || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fakk2-glproxy-mingw-i686
+          path: |
+            build/bin/opengl32.dll
+            fakk2_glproxy.ini
+            README.md
